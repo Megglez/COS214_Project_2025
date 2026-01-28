@@ -7,6 +7,9 @@
 
 #include "Nursery.h"
 #include "../Staff/Cashiers.h"
+#include "../Staff/SalesStaff.h"
+#include "../Staff/Gardener.h"
+#include "../Staff/Manager.h"
 #include "../Greenhouse/AddStock.h"
 #include "../Greenhouse/Autumn.h"
 #include "../Greenhouse/Winter.h"
@@ -65,8 +68,47 @@ Nursery::Nursery(QObject *parent) : QObject(parent)
 
     // Initialize Staff Management
     infoDesk = new InfoDesk();
-    cashier = nullptr; // Initialize to nullptr - will be created when needed
+
+    // Create staff members
+    std::string cashierName = "Alice";
+    std::string cashierId = "C001";
+    cashier = new Cashiers(cashierName, cashierId, infoDesk);
+    infoDesk->addStaff(cashier);
+    staff.push_back(cashier);
+
+    std::string salesName1 = "Bob";
+    std::string salesId1 = "S001";
+    Staff *salesStaff1 = new SalesStaff(salesName1, salesId1, infoDesk, inventory);
+    infoDesk->addStaff(salesStaff1);
+    staff.push_back(salesStaff1);
+
+    std::string salesName2 = "Carol";
+    std::string salesId2 = "S002";
+    Staff *salesStaff2 = new SalesStaff(salesName2, salesId2, infoDesk, inventory);
+    infoDesk->addStaff(salesStaff2);
+    staff.push_back(salesStaff2);
+
+    std::string gardenerName = "Dave";
+    std::string gardenerId = "G001";
+    Staff *gardenerStaff = new Gardener(gardenerName, gardenerId, infoDesk, inventory);
+    infoDesk->addStaff(gardenerStaff);
+    staff.push_back(gardenerStaff);
+
+    std::string managerName = "Eve";
+    std::string managerId = "M001";
+    qDebug() << "About to create Manager...";
+    Staff *managerStaff = new Manager(managerName, managerId, infoDesk, inventory);
+    qDebug() << "Manager created, adding to InfoDesk...";
+    infoDesk->addStaff(managerStaff);
+    qDebug() << "Manager added to InfoDesk, adding to staff vector...";
+    staff.push_back(managerStaff);
+
+    qDebug() << "Staff members created:" << staff.size();
+    qDebug() << "Creating AddStock command...";
+
     startPlants = new AddStock(inventory);
+
+    qDebug() << "Nursery constructor complete!";
 }
 
 void Nursery::setStock(unique_ptr<Plant> plant, int amount)
@@ -94,14 +136,15 @@ Nursery::~Nursery()
     activeCustomers.clear();
     delete customerFactory;
 
-    // Clean up staff
-    delete infoDesk;
-    delete cashier;
+    // Clean up staff (delete staff first, then InfoDesk)
+    // Note: cashier is already in the staff vector, so don't delete separately
     for (Staff *s : staff)
     {
         delete s;
     }
     staff.clear();
+    cashier = nullptr; // Already deleted as part of staff vector
+    delete infoDesk;
 
     // Clean up plant management
     delete stock;
@@ -138,6 +181,11 @@ void Nursery::addCustomer(Customer *customer)
     {
         activeCustomers.push_back(customer);
         customerCount++;
+        qDebug() << "Nursery::addCustomer - Customer" << customer->getId() << "added. Total:" << customerCount << "/" << customerLimit;
+    }
+    else if (customer)
+    {
+        qDebug() << "Nursery::addCustomer - Cannot add customer. Count:" << customerCount << "Limit:" << customerLimit;
     }
 }
 
@@ -177,14 +225,24 @@ void Nursery::handleCustomerDeparture(Customer *customer)
         // Free any assigned staff
         if (customer->getAssignedStaff())
         {
-            // Staff becomes available again (implementation depends on your staff state system)
-            qDebug() << "Freeing staff assigned to departing customer.";
+            Staff *staff = customer->getAssignedStaff();
+            qDebug() << "Freeing staff" << staff->getName().c_str() << "assigned to departing customer.";
+            staff->completeTask(); // Mark staff as available again
+            customer->setAssignedStaff(nullptr);
         }
 
-        // Delete the customer object and free memory
-        delete customer;
+        // Remove customer from any waiting queues in InfoDesk
+        if (infoDesk)
+        {
+            infoDesk->removeCustomerFromQueue(customer);
+        }
 
-        qDebug() << "Customer memory deallocated. Current customer count:" << customerCount;
+        // NOTE: Do NOT delete customer here! The customer object is still executing code
+        // (called from within Customer::processNextAction()). Deleting it here causes
+        // a segfault. The GUI will handle the deletion after the customer is marked
+        // for removal and visually moved to the exit.
+
+        qDebug() << "Customer" << customer->getId() << "marked for departure. Current customer count:" << customerCount;
     }
     else
     {

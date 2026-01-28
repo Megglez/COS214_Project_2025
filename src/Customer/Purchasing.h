@@ -47,15 +47,21 @@ private:
      */
     std::vector<int> quantities;
 
+    /**
+     * @brief Flag indicating if this Purchasing owns the plant pointers
+     */
+    bool ownsPlants;
+
 public:
     /**
      * @brief Construct a Purchasing action for a single plant
      * @param plant Pointer to the plant to purchase
      * @param quantity Number of this plant to buy
+     * @param ownsPlantPointers If true, Purchasing will delete plants in destructor (default: false)
      *
      * Creates a purchase action for one plant type.
      */
-    Purchasing(Plant *plant, int quantity) : Action("Purchasing")
+    Purchasing(Plant *plant, int quantity, bool ownsPlantPointers = false) : Action("Purchasing"), ownsPlants(ownsPlantPointers)
     {
         if (plant)
         {
@@ -68,16 +74,26 @@ public:
      * @brief Construct a Purchasing action for multiple plants
      * @param plants Vector of plants to purchase
      * @param quants Vector of quantities for each plant
+     * @param ownsPlantPointers If true, Purchasing will delete plants in destructor (default: false)
      *
      * Creates a purchase action for multiple plant types.
      * Vectors must be the same size.
      */
-    Purchasing(std::vector<Plant *> plants, std::vector<int> quants) : Action("Purchasing"), plantsToBuy(plants), quantities(quants) {}
+    Purchasing(std::vector<Plant *> plants, std::vector<int> quants, bool ownsPlantPointers = false) : Action("Purchasing"), plantsToBuy(plants), quantities(quants), ownsPlants(ownsPlantPointers) {}
 
     /**
-     * @brief Virtual destructor
+     * @brief Virtual destructor - cleans up owned plant pointers
      */
-    virtual ~Purchasing() {}
+    virtual ~Purchasing()
+    {
+        if (ownsPlants)
+        {
+            for (Plant *plant : plantsToBuy)
+            {
+                delete plant;
+            }
+        }
+    }
 
     /**
      * @brief Handle the purchasing action

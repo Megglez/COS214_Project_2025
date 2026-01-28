@@ -14,17 +14,20 @@ void Staff::changeState()
 	// TODO - implement Staff ::changeState
 	if (this->state)
 	{
+		std::string oldState = this->state->getStateName();
 		if (this->state->getStateName() == "Busy")
 		{
 			delete this->state;
 			this->state = new Available();
 			this->state->setContext(this);
+			cout << "Staff " << name << " state changed from " << oldState << " to " << this->state->getStateName() << endl;
 		}
 		else
 		{
 			delete this->state;
 			this->state = new Busy();
 			this->state->setContext(this);
+			cout << "Staff " << name << " state changed from " << oldState << " to " << this->state->getStateName() << endl;
 		}
 	}
 }
@@ -109,10 +112,11 @@ void Staff::assistCustomer(Customer *cc)
 		return;
 	}
 
-	cout << "Staff " << name << " is assisting Customer " << cc->getId();
+	cout << "Staff " << name << " is assisting Customer " << cc->getId() << endl;
 	currentCustomer = cc;
 	this->changeState();
 	available = false;
+	cout << "Staff " << name << " status is now: " << getStateName() << endl;
 	performDuty();
 	cc->setAssignedStaff(this);
 }

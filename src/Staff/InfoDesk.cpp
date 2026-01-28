@@ -198,6 +198,14 @@ void InfoDesk::processWaitingCustomers()
 
         Customer *customer = waitingCustomers.front();
 
+        // Check if customer or action is null (customer left or invalid)
+        if (!customer || !customer->getAction())
+        {
+            std::cout << "Customer in queue is null or has no action. Removing from queue." << std::endl;
+            waitingCustomers.pop();
+            continue;
+        }
+
         if (customer->getAction()->getActionName() != "Enquiring")
         {
             std::cout << "Customer " << customer->getId() << " is no longer enquiring. Removing from queue." << std::endl;
@@ -388,9 +396,9 @@ void InfoDesk::buildChain()
 
     std::cout << "In chain: " << std::endl;
     std::cout << sales.size() << " SalesStaff " << std::endl;
-    std::cout << managers.size() + " Managers" << std::endl;
-    std::cout << gardeners.size() + " Gardeners" << std::endl;
-    std::cout << chashiers.size() + " Cahiers" << std::endl;
+    std::cout << managers.size() << " Managers" << std::endl;
+    std::cout << gardeners.size() << " Gardeners" << std::endl;
+    std::cout << chashiers.size() << " Cashiers" << std::endl;
 }
 
 void InfoDesk::clearChain()
@@ -481,4 +489,39 @@ void InfoDesk::AssignStaffToCustomer(Customer *cc)
 vector<Staff *> InfoDesk::getAllStaff()
 {
     return AllStaff;
+}
+
+void InfoDesk::removeCustomerFromQueue(Customer *customer)
+{
+    if (!customer)
+    {
+        return;
+    }
+
+    // Since std::queue doesn't support removal, we need to rebuild it without the customer
+    std::queue<Customer *> newQueue;
+    int removedCount = 0;
+
+    while (!waitingCustomers.empty())
+    {
+        Customer *current = waitingCustomers.front();
+        waitingCustomers.pop();
+
+        if (current != customer)
+        {
+            newQueue.push(current);
+        }
+        else
+        {
+            removedCount++;
+            std::cout << "Removed customer " << customer->getId() << " from waiting queue" << std::endl;
+        }
+    }
+
+    waitingCustomers = newQueue;
+
+    if (removedCount > 0)
+    {
+        std::cout << "Removed " << removedCount << " instance(s) of customer " << customer->getId() << " from queue. Queue size now: " << waitingCustomers.size() << std::endl;
+    }
 }

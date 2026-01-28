@@ -12,7 +12,7 @@ public:
 
 	void performDuty() override;
 	bool canHandleEnquiry() override;
-	SalesStaff(string &name, string &id, InfoDesk *infodesk);
+	SalesStaff(string &name, string &id, InfoDesk *infodesk, Inventory *inventory);
 	virtual ~SalesStaff();
 	void setRole() override;
 };

@@ -52,16 +52,22 @@ private:
      */
     int questionType;
 
+    /**
+     * @brief Flag indicating if this Enquire owns the plant pointers
+     */
+    bool ownsPlants;
+
 public:
     /**
      * @brief Construct an Enquire action for a single plant
      * @param plant Pointer to the plant of interest
      * @param question The question being asked (default: empty)
      * @param qType Question type: 0 = advice, 1 = information (default: 0)
+     * @param ownsPlantPointers If true, Enquire will delete plants in destructor (default: false)
      *
      * Creates an enquiry about a specific plant.
      */
-    Enquire(Plant *plant, const std::string &question = "", int qType = 0) : Action("Enquiring"), enquiryQuestion(question), questionType(qType)
+    Enquire(Plant *plant, const std::string &question = "", int qType = 0, bool ownsPlantPointers = false) : Action("Enquiring"), enquiryQuestion(question), questionType(qType), ownsPlants(ownsPlantPointers)
     {
         if (plant)
             plantsOfInterest.push_back(plant);
@@ -72,15 +78,28 @@ public:
      * @param plants Vector of plants the customer is asking about
      * @param question The question being asked (default: empty)
      * @param qType Question type: 0 = advice, 1 = information (default: 0)
+     * @param ownsPlantPointers If true, Enquire will delete plants in destructor (default: false)
      *
      * Creates an enquiry about multiple plants.
      */
-    Enquire(std::vector<Plant *> plants, const std::string &question = "", int qType = 0) : Action("Enquiring"), plantsOfInterest(plants), enquiryQuestion(question), questionType(qType) {}
+    Enquire(std::vector<Plant *> plants, const std::string &question = "", int qType = 0, bool ownsPlantPointers = false) : Action("Enquiring"), plantsOfInterest(plants), enquiryQuestion(question), questionType(qType), ownsPlants(ownsPlantPointers)
+    {
+        std::cout << "[ENQUIRE CONSTRUCTOR] Created Enquire action with question: " << question << std::endl;
+    }
 
     /**
-     * @brief Virtual destructor
+     * @brief Virtual destructor - cleans up owned plant pointers
      */
-    virtual ~Enquire() {}
+    virtual ~Enquire()
+    {
+        if (ownsPlants)
+        {
+            for (Plant *plant : plantsOfInterest)
+            {
+                delete plant;
+            }
+        }
+    }
 
     /**
      * @brief Handle the enquiry action
@@ -89,6 +108,14 @@ public:
      * Implements the Action interface.
      */
     void handle() override;
+
+    /**
+     * @brief Handle enquiry with customer context
+     * @param customer The customer making the enquiry
+     *
+     * Requests staff assistance from the info desk.
+     */
+    void handle(Customer *customer) override;
 
     /**
      * @brief Get the next action for this customer

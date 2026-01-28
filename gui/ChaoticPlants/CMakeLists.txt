@@ -31,11 +31,15 @@ file(GLOB_RECURSE GREENHOUSE_SOURCES "../../src/Greenhouse/*.cpp")
 file(GLOB_RECURSE STAFF_SOURCES "../../src/Staff/*.cpp")
 file(GLOB_RECURSE NURSERY_SOURCES "../../src/Nursery/*.cpp")
 
-# Exclude any main.cpp files from backend sources
+# Exclude any main.cpp files and MOC-generated files from backend sources
 list(FILTER CUSTOMER_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
 list(FILTER GREENHOUSE_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
 list(FILTER STAFF_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
 list(FILTER NURSERY_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
+list(FILTER CUSTOMER_SOURCES EXCLUDE REGEX ".*moc_.*\\.cpp$")
+list(FILTER GREENHOUSE_SOURCES EXCLUDE REGEX ".*moc_.*\\.cpp$")
+list(FILTER STAFF_SOURCES EXCLUDE REGEX ".*moc_.*\\.cpp$")
+list(FILTER NURSERY_SOURCES EXCLUDE REGEX ".*moc_.*\\.cpp$")
 
 set(PROJECT_SOURCES
         main.cpp

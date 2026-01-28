@@ -10,6 +10,7 @@
 #include "Browse.h"
 #include "Customer.h"
 #include "../Staff/InfoDesk.h"
+#include "../Nursery/Nursery.h"
 #include <iostream>
 #include <random>
 using namespace std;
@@ -20,6 +21,35 @@ void Enquire::handle()
     if (!enquiryQuestion.empty())
     {
         cout << "Customer's question: " << enquiryQuestion << endl;
+    }
+
+    // Request staff assistance immediately
+    handle(nullptr);
+}
+
+void Enquire::handle(Customer *customer)
+{
+    if (!customer)
+    {
+        return;
+    }
+
+    cout << "Customer " << customer->getId() << " is enquiring at info desk." << endl;
+    if (!enquiryQuestion.empty())
+    {
+        cout << "Question: " << enquiryQuestion << endl;
+    }
+
+    // Get info desk from nursery and request assistance
+    Nursery *nursery = customer->getNursery();
+    if (nursery && nursery->getInfoDesk())
+    {
+        InfoDesk *desk = nursery->getInfoDesk();
+        desk->handleCustomer(customer);
+    }
+    else
+    {
+        cout << "Warning: No info desk available for customer enquiry." << endl;
     }
 }
 

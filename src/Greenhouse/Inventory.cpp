@@ -15,6 +15,10 @@
 #include "Prime.h"
 #include "Wilting.h"
 #include "Dead.h"
+#include "FlowerPlanter.h"
+#include "HerbPlanter.h"
+#include "TreePlanter.h"
+#include "SucculentPlanter.h"
 
 /**
  * @brief Default constructor for Inventory
@@ -311,6 +315,7 @@ StageOfDevelopment *Inventory::determineStageForSeason(Plant *plant, const std::
 void Inventory::seasonalChange(std::string &fromSeason, std::string &toSeason)
 {
     std::cout << "Season changing from " << fromSeason << " to " << toSeason << std::endl;
+    addDefaultPlantsForSeason(toSeason);
     adjustStockForSeason(toSeason);
     updatePlantStagesForSeason(toSeason);
 
@@ -319,6 +324,136 @@ void Inventory::seasonalChange(std::string &fromSeason, std::string &toSeason)
     {
         staff->update(message);
     }
+}
+
+/**
+ * @brief Adds default plants for the current season if they don't exist
+ * @param season The season to add default plants for
+ *
+ * Ensures that each season has representative plants available in inventory.
+ * Adds default plants with initial quantities if they are not already present.
+ */
+void Inventory::addDefaultPlantsForSeason(const std::string &season)
+{
+    std::cout << "=== ADDING DEFAULT PLANTS FOR SEASON: " << season << " ===" << std::endl;
+    std::cout << "Current inventory size: " << inventoryList.size() << std::endl;
+
+    // Check which plants exist to avoid duplicates
+    auto plantExists = [this](const std::string &name)
+    {
+        bool exists = inventoryList.find(name) != inventoryList.end();
+        if (exists)
+        {
+            std::cout << "  - Plant '" << name << "' already exists, skipping" << std::endl;
+        }
+        return exists;
+    };
+
+    if (season == "Spring")
+    {
+        // Spring plants - flowers and herbs flourish
+        if (!plantExists("Rose"))
+        {
+            std::cout << "  + Adding Rose (90 units)" << std::endl;
+            FlowerPlanter flowerPlanter;
+            addPlant(std::unique_ptr<Plant>(flowerPlanter.planterMethod("Rose")), 90);
+        }
+        if (!plantExists("Tulip"))
+        {
+            FlowerPlanter flowerPlanter;
+            addPlant(std::unique_ptr<Plant>(flowerPlanter.planterMethod("Tulip")), 85);
+        }
+        if (!plantExists("Basil"))
+        {
+            HerbPlanter herbPlanter;
+            addPlant(std::unique_ptr<Plant>(herbPlanter.planterMethod("Basil")), 80);
+        }
+        if (!plantExists("Oak"))
+        {
+            TreePlanter treePlanter;
+            addPlant(std::unique_ptr<Plant>(treePlanter.planterMethod("Oak")), 100);
+        }
+        if (!plantExists("Jade"))
+        {
+            SucculentPlanter succulentPlanter;
+            addPlant(std::unique_ptr<Plant>(succulentPlanter.planterMethod("Jade")), 55);
+        }
+    }
+    else if (season == "Summer")
+    {
+        // Summer plants - succulents and all plant types thrive
+        if (!plantExists("Sunflower"))
+        {
+            FlowerPlanter flowerPlanter;
+            addPlant(std::unique_ptr<Plant>(flowerPlanter.planterMethod("Sunflower")), 100);
+        }
+        if (!plantExists("Lavender"))
+        {
+            HerbPlanter herbPlanter;
+            addPlant(std::unique_ptr<Plant>(herbPlanter.planterMethod("Lavender")), 100);
+        }
+        if (!plantExists("Cactus"))
+        {
+            SucculentPlanter succulentPlanter;
+            addPlant(std::unique_ptr<Plant>(succulentPlanter.planterMethod("Cactus")), 100);
+        }
+        if (!plantExists("Aloe"))
+        {
+            SucculentPlanter succulentPlanter;
+            addPlant(std::unique_ptr<Plant>(succulentPlanter.planterMethod("Aloe")), 95);
+        }
+        if (!plantExists("Pine"))
+        {
+            TreePlanter treePlanter;
+            addPlant(std::unique_ptr<Plant>(treePlanter.planterMethod("Pine")), 70);
+        }
+    }
+    else if (season == "Autumn")
+    {
+        // Autumn plants - trees and some flowers
+        if (!plantExists("Maple"))
+        {
+            TreePlanter treePlanter;
+            addPlant(std::unique_ptr<Plant>(treePlanter.planterMethod("Maple")), 90);
+        }
+        if (!plantExists("Chrysanthemum"))
+        {
+            FlowerPlanter flowerPlanter;
+            addPlant(std::unique_ptr<Plant>(flowerPlanter.planterMethod("Chrysanthemum")), 50);
+        }
+        if (!plantExists("Rosemary"))
+        {
+            HerbPlanter herbPlanter;
+            addPlant(std::unique_ptr<Plant>(herbPlanter.planterMethod("Rosemary")), 20);
+        }
+    }
+    else if (season == "Winter")
+    {
+        // Winter plants - mostly winter flowers and hardy trees
+        if (!plantExists("Poinsettia"))
+        {
+            FlowerPlanter winterFlowerPlanter(true); // Winter flower
+            addPlant(std::unique_ptr<Plant>(winterFlowerPlanter.planterMethod("Poinsettia")), 100);
+        }
+        if (!plantExists("Pansy"))
+        {
+            FlowerPlanter winterFlowerPlanter(true); // Winter flower
+            addPlant(std::unique_ptr<Plant>(winterFlowerPlanter.planterMethod("Pansy")), 95);
+        }
+        if (!plantExists("Holly"))
+        {
+            FlowerPlanter winterFlowerPlanter(true); // Winter flower
+            addPlant(std::unique_ptr<Plant>(winterFlowerPlanter.planterMethod("Holly")), 90);
+        }
+        if (!plantExists("Spruce"))
+        {
+            TreePlanter treePlanter;
+            addPlant(std::unique_ptr<Plant>(treePlanter.planterMethod("Spruce")), 60);
+        }
+    }
+
+    std::cout << "=== DEFAULT PLANTS ADDITION COMPLETE FOR " << season << " ===" << std::endl;
+    std::cout << "Final inventory size: " << inventoryList.size() << std::endl;
 }
 
 /**
@@ -345,17 +480,6 @@ void Inventory::adjustStockForSeason(const std::string &season)
 
         if (plantPtr)
         {
-            // If the plant has zero water, it dies and should be removed from inventory
-            int watered = plantPtr->getWatered();
-            if (watered == 0)
-            {
-                std::cout << "Plant '" << plantName << "' has no water left and died. Removing from inventory." << std::endl;
-                std::string message = plantName + " has died due to lack of water and removed from inventory";
-                notify(message);
-                it = inventoryList.erase(it);
-                continue; // move to next element
-            }
-
             int newStockLevel = currentStock; // Default to current stock
 
             // Check if it's a Winter flower using the virtual method
@@ -471,7 +595,8 @@ void Inventory::adjustStockForSeason(const std::string &season)
 
             // Update the stock level
             currentStock = newStockLevel;
-            plantPtr->setWatered(0);
+            // Reset water for new season
+            plantPtr->setWatered(5);
         }
 
         ++it;

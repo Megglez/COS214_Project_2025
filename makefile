@@ -2,7 +2,7 @@
 .PHONY: gui
 
 gui:
-	cd gui/ChaoticPlants && mkdir -p build && cd build && cmake .. && $(MAKE) && ./ChaoticPlants
+	cd gui/ChaoticPlants && mkdir -p build && cd build && rm -f CMakeCache.txt && rm -rf CMakeFiles && cmake .. && $(MAKE) && ./ChaoticPlants
 .PHONY: cmake_test
 
 
@@ -16,20 +16,17 @@ QT_INCLUDES = $(shell pkg-config --cflags Qt5Core Qt5Gui Qt5Widgets 2>/dev/null 
 QT_DEFINES = -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB
 QT_LIBS = $(shell pkg-config --libs Qt5Core Qt5Gui Qt5Widgets 2>/dev/null || echo "-lQt5Core -lQt5Gui -lQt5Widgets")
 CXXFLAGS = -g -std=c++17 -Wall -Wextra $(QT_INCLUDES)
-QT_DIR = /home/blegibz/Qt/6.10.0/gcc_64
-QT_INCLUDES = -I$(QT_DIR)/include -I$(QT_DIR)/include/QtCore -I$(QT_DIR)/include/QtGui -I$(QT_DIR)/include/QtWidgets
-QT_LIBS = -L$(QT_DIR)/lib -lQt6Core -lQt6Gui -lQt6Widgets
 GCOV_FLAGS = -fprofile-arcs -ftest-coverage
-MOC = /home/blegibz/Qt/Tools/QtDesignStudio/qt6_design_studio_reduced_version/libexec/moc
+MOC = moc-qt5
 
 
 # Find all source files in src subfolders
-SRC_DIRS = src/Greenhouse src/Staff src/Customer src/Nursery
+SRC_DIRS = src/Greenhouse src/Staff src/Customer src/Greenhouse/Nursery
 SRCS = $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.cpp))
-# Add ONLY Nursery.cpp but NOT mainwindow.cpp
-SRCS += src/Nursery/Nursery.cpp
+# Exclude test files and GUI-specific files
 SRCS := $(filter-out %_test.cpp %Test.cpp, $(SRCS))
-SRCS := $(filter-out src/Nursery/mainwindow.cpp, $(SRCS))  # ← EXCLUDE mainwindow.cpp
+SRCS := $(filter-out src/Greenhouse/Nursery/mainwindow.cpp, $(SRCS))  # ← EXCLUDE mainwindow.cpp
+SRCS := $(filter-out src/Greenhouse/Nursery/main.cpp, $(SRCS))  # ← EXCLUDE GUI main.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 
@@ -41,8 +38,8 @@ DEMO_TARGET = DemoMain
 all: $(TARGET)
 
 # MOC files needed for Qt classes
-MOC_SRCS = src/Customer/moc_Customer.cpp src/Customer/moc_Browse.cpp src/Nursery/moc_Nursery.cpp src/Nursery/moc_Clock.cpp \
-           src/Nursery/moc_CustomerClock.cpp src/Nursery/moc_PlantClock.cpp src/Nursery/moc_SeasonClock.cpp
+MOC_SRCS = src/Customer/moc_Customer.cpp src/Customer/moc_Browse.cpp src/Greenhouse/Nursery/moc_Nursery.cpp src/Greenhouse/Nursery/moc_Clock.cpp \
+           src/Greenhouse/Nursery/moc_CustomerClock.cpp src/Greenhouse/Nursery/moc_PlantClock.cpp src/Greenhouse/Nursery/moc_SeasonClock.cpp
 MOC_OBJS = $(MOC_SRCS:.cpp=.o)
 
 # For TestingMain, we need to run MOC on Qt classes first, then compile and link
@@ -56,19 +53,19 @@ src/Customer/moc_Customer.cpp: src/Customer/Customer.h
 src/Customer/moc_Browse.cpp: src/Customer/Browse.h
 	moc-qt5 $(QT_INCLUDES) $< -o $@
 
-src/Nursery/moc_Nursery.cpp: src/Nursery/Nursery.h
+src/Greenhouse/Nursery/moc_Nursery.cpp: src/Greenhouse/Nursery/Nursery.h
 	$(MOC) $(QT_INCLUDES) $< -o $@
 
-src/Nursery/moc_Clock.cpp: src/Nursery/Clock.h
+src/Greenhouse/Nursery/moc_Clock.cpp: src/Greenhouse/Nursery/Clock.h
 	$(MOC) $(QT_INCLUDES) $< -o $@
 
-src/Nursery/moc_CustomerClock.cpp: src/Nursery/CustomerClock.h
+src/Greenhouse/Nursery/moc_CustomerClock.cpp: src/Greenhouse/Nursery/CustomerClock.h
 	$(MOC) $(QT_INCLUDES) $< -o $@
 
-src/Nursery/moc_PlantClock.cpp: src/Nursery/PlantClock.h
+src/Greenhouse/Nursery/moc_PlantClock.cpp: src/Greenhouse/Nursery/PlantClock.h
 	$(MOC) $(QT_INCLUDES) $< -o $@
 
-src/Nursery/moc_SeasonClock.cpp: src/Nursery/SeasonClock.h
+src/Greenhouse/Nursery/moc_SeasonClock.cpp: src/Greenhouse/Nursery/SeasonClock.h
 	$(MOC) $(QT_INCLUDES) $< -o $@
 
 
@@ -108,6 +105,9 @@ valgrind: $(TARGET)
 valgrind_test: $(TEST_TARGET)
 	valgrind --leak-check=full --track-origins=yes ./$(TEST_TARGET)
 
+valgrind_demo:
+	cd gui/ChaoticPlants && mkdir -p build && cd build && cmake .. && $(MAKE) && valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --suppressions=../../../qt5.supp ./ChaoticPlants
+
 # GDB targets
 gdb: $(TARGET)
 	gdb ./$(TARGET)
@@ -135,7 +135,7 @@ clean_gcda:
 clean:
 	rm -f $(OBJS) $(MOC_OBJS) $(TEST_OBJS) $(TARGET) $(DEMO_TARGET) $(TEST_TARGET) *.o *.gcov *.gcda *.gcno *.gz *.html *.css output.txt coverage.txt $(MOC_SRCS)
 
-.PHONY: all run demo clean test valgrind valgrind_test gdb gdb_test coverage coverage_test report clean_gcda
+.PHONY: all run demo clean test valgrind valgrind_test valgrind_demo gdb gdb_test coverage coverage_test report clean_gcda
 
 # Run CMake and execute unit tests
 unit_tests:

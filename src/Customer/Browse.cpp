@@ -73,9 +73,23 @@ void Browse::onBrowseTimeout()
     {
         // Go to infodesk (enquire)
         std::cout << "Customer decided to enquire. Going to infodesk." << std::endl;
-        if (currentCustomer->getAction())
-            delete currentCustomer->getAction();
-        currentCustomer->setAction(new Enquire(plantsToBuy));
+
+        // Clone plants for Enquire since Browse will delete its own plants
+        std::vector<Plant *> enquirePlants;
+        for (Plant *plant : plantsToBuy)
+        {
+            if (plant)
+            {
+                enquirePlants.push_back(plant->clone());
+            }
+        }
+
+        // setAction will delete this Browse object, so don't access members after this
+        if (currentCustomer)
+        {
+            // Pass ownsPlants=true since we cloned them for Enquire
+            currentCustomer->setAction(new Enquire(enquirePlants, "", 0, true));
+        }
         // You may want to call requestStaffAssistance here if InfoDesk is available
     }
     else
@@ -144,10 +158,16 @@ void Browse::onBrowseTimeout()
             }
         }
 
-        // Change state to purchasing with all plants
-        if (currentCustomer->getAction())
-            delete currentCustomer->getAction();
-        currentCustomer->setAction(new Purchasing(plantsToPurchase, quantitiesToPurchase));
+        // Transfer plant ownership to basket - Browse should not delete them
+        // Set ownsPlants to false before transitioning
+        ownsPlants = false;
+
+        // Change state to purchasing
+        // NOTE: setAction will delete this Browse object, so don't access any members after this!
+        if (currentCustomer)
+        {
+            currentCustomer->setAction(new Purchasing(std::vector<Plant *>(), std::vector<int>(), false));
+        }
     }
 }
 

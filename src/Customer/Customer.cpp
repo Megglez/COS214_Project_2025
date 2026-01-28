@@ -22,6 +22,12 @@ Customer::Customer(Action *action, Nursery *nursery, QObject *parent) : QObject(
 Customer::~Customer()
 {
     delete action;
+    // Clean up basket - these are cloned plants that customer owns
+    for (Plant *plant : basket)
+    {
+        delete plant;
+    }
+    basket.clear();
 }
 
 // request from staff
@@ -33,21 +39,26 @@ void Customer::request()
 
 void Customer::setAction(Action *newAction)
 {
+    qDebug() << "Customer" << id << "setAction called. Old action:" << (this->action ? this->action->getActionName().c_str() : "nullptr")
+             << "New action:" << (newAction ? newAction->getActionName().c_str() : "nullptr");
+
     if (this->action)
     {
+        qDebug() << "Deleting old action...";
         delete this->action;
+        qDebug() << "Old action deleted.";
     }
     this->action = newAction;
+    qDebug() << "Customer" << id << "action set complete.";
 }
 
 bool Customer::addToBasket(Plant *plants, int quantity)
 {
-    // if (nursery-)
-    plants->getName();
-
+    // Clone each plant instance for the basket
+    // This ensures each basket entry is independent
     for (int i = 0; i < quantity; i++)
     {
-        basket.push_back(plants);
+        basket.push_back(plants->clone());
     }
 
     std::cout << "Customer " << id << " added " << quantity << " of "
@@ -76,7 +87,14 @@ Action *Customer::getAction() const
 void Customer::setAssignedStaff(Staff *staff)
 {
     this->assignedStaff = staff;
-    cout << "Customer " << id << " is now being assisted by staff member " << staff->getName() << endl;
+    if (staff)
+    {
+        cout << "Customer " << id << " is now being assisted by staff member " << staff->getName() << endl;
+    }
+    else
+    {
+        cout << "Customer " << id << " staff assignment cleared (no longer being assisted)" << endl;
+    }
 }
 
 void Customer::processNextAction()
@@ -91,8 +109,11 @@ void Customer::processNextAction()
 
     if (nextAction == nullptr)
     {
-        // Customer is leaving
+        // Customer is leaving - set action to nullptr to signal leaving
+        // but DON'T delete the customer here (avoid use-after-free)
         qDebug() << "Customer" << id << "is leaving the nursery";
+
+        setAction(nullptr); // Clear action to signal leaving state
 
         // Only notify nursery if one is assigned (not in testing mode)
         if (nursery)

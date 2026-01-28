@@ -21,6 +21,7 @@ public:
 	Customer *dequeueCustomer();
 	bool hasCustomersInQueue() const;
 	int getQueueSize() const;
+	const std::queue<Customer *> &getQueue() const { return customerQueue; }
 
 	// Transaction processing
 	void makeTransaction();

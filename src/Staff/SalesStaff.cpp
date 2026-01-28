@@ -8,8 +8,10 @@
 #include "SalesStaff.h"
 #include "../Customer/Customer.h"
 #include "../Customer/Enquire.h"
+#include "InfoDesk.h"
+#include <set>
 
-SalesStaff::SalesStaff(string &name, string &id, InfoDesk *infodesk) : Staff(name, id, infodesk)
+SalesStaff::SalesStaff(string &name, string &id, InfoDesk *infodesk, Inventory *inventory) : Staff(name, id, infodesk), subject(inventory)
 {
 	// TODO - implement SalesStaff::SalesStaff
 	setRole();
@@ -26,10 +28,21 @@ bool SalesStaff::canHandleEnquiry()
 
 void SalesStaff::performDuty() // 1 job
 {
+	// Check if we have a customer assigned
+	Customer *cust = getCurrentCustomer();
+	if (!cust)
+		return;
+
 	// already checked question type=0;
-	Enquire *enquiry = dynamic_cast<Enquire *>(getCurrentCustomer()->getAction());
+	Enquire *enquiry = dynamic_cast<Enquire *>(cust->getAction());
 	if (!enquiry)
 		return;
+
+	// Only respond once per assistance - check if we've already responded
+	static std::set<Customer *> respondedCustomers;
+	if (respondedCustomers.count(cust) > 0)
+		return; // Already answered this customer
+	respondedCustomers.insert(cust);
 
 	string question = enquiry->getEnquiryQuestion();
 	if (question == "What summer flowers are available")
@@ -68,6 +81,9 @@ void SalesStaff::performDuty() // 1 job
 	{
 		cout << "General Sales Enquiry response." << endl;
 	}
+
+	// Note: Customer will be released by GUI after timer expires
+	// Staff state will be managed by the GUI
 }
 
 void SalesStaff::setRole()

@@ -16,7 +16,7 @@
 #include <thread>
 #include <chrono>
 #include <QCoreApplication>
-#include "src/Nursery/Nursery.h"
+#include "src/Greenhouse/Nursery/Nursery.h"
 #include "src/Customer/Customer.h"
 #include "src/Customer/Browse.h"
 #include "src/Customer/Enquire.h"
@@ -36,6 +36,10 @@
 #include "src/Greenhouse/GiftWrap.h"
 #include "src/Greenhouse/Pot.h"
 #include "src/Staff/Staff.h"
+#include "src/Staff/Manager.h"
+#include "src/Staff/Cashiers.h"
+#include "src/Staff/Gardener.h"
+#include "src/Staff/SalesStaff.h"
 
 using namespace std;
 
@@ -379,24 +383,24 @@ void handleInventoryManagement(Nursery *nursery)
             switch (plantChoice)
             {
             case 1:
-                plant = nursery->getFlowerFactory()->makePlant();
+                plant = std::unique_ptr<Plant>(nursery->getFlowerFactory()->planterMethod("Rose"));
                 cout << "Adding " << quantity << " flowers to stock...\n";
                 break;
             case 2:
-                plant = nursery->getHerbFactory()->makePlant();
+                plant = std::unique_ptr<Plant>(nursery->getHerbFactory()->planterMethod("Basil"));
                 cout << "Adding " << quantity << " herbs to stock...\n";
                 break;
             case 3:
             {
                 TreePlanter treePlanter;
-                plant = treePlanter.makePlant();
+                plant = std::unique_ptr<Plant>(treePlanter.planterMethod("Oak"));
                 cout << "Adding " << quantity << " trees to stock...\n";
                 break;
             }
             case 4:
             {
                 SucculentPlanter succulentPlanter;
-                plant = succulentPlanter.makePlant();
+                plant = std::unique_ptr<Plant>(succulentPlanter.planterMethod("Aloe"));
                 cout << "Adding " << quantity << " succulents to stock...\n";
                 break;
             }
@@ -584,7 +588,7 @@ void completeIntegratedDemo(Nursery *nursery)
     cout << "Factory Method creates plants, Command Pattern adds to inventory:\n\n";
 
     cout << "  🌸 FlowerPlanter creating roses...\n";
-    auto flower = nursery->getFlowerFactory()->makePlant();
+    auto flower = std::unique_ptr<Plant>(nursery->getFlowerFactory()->planterMethod("Rose"));
     delay(500);
     cout << "     → Created: " << flower->getName() << " (" << flower->getType() << ")\n";
     nursery->getStock()->Add(std::move(flower), 5);
@@ -592,7 +596,7 @@ void completeIntegratedDemo(Nursery *nursery)
     cout << "     → AddStock command executed: 5 units added\n\n";
 
     cout << "  🌿 HerbPlanter creating herbs...\n";
-    auto herb = nursery->getHerbFactory()->makePlant();
+    auto herb = std::unique_ptr<Plant>(nursery->getHerbFactory()->planterMethod("Basil"));
     delay(500);
     cout << "     → Created: " << herb->getName() << " (" << herb->getType() << ")\n";
     nursery->getStock()->Add(std::move(herb), 8);
@@ -601,7 +605,7 @@ void completeIntegratedDemo(Nursery *nursery)
 
     cout << "  🌳 TreePlanter creating saplings...\n";
     TreePlanter treePlanter;
-    auto tree = treePlanter.makePlant();
+    auto tree = std::unique_ptr<Plant>(treePlanter.planterMethod("Oak"));
     delay(500);
     cout << "     → Created: " << tree->getName() << " (" << tree->getType() << ")\n";
     nursery->getStock()->Add(std::move(tree), 3);
@@ -647,7 +651,7 @@ void completeIntegratedDemo(Nursery *nursery)
     cout << "🎁 PHASE 4: Plant Preparation (DECORATOR PATTERN)\n";
     cout << "Decorating plants for customer purchase:\n\n";
 
-    auto baseFlower = nursery->getFlowerFactory()->makePlant();
+    auto baseFlower = std::unique_ptr<Plant>(nursery->getFlowerFactory()->planterMethod("Rose"));
     cout << "  Base plant: " << baseFlower->getName() << "\n";
     delay(500);
 
@@ -796,8 +800,8 @@ void plantLifecycleDemo(Nursery *nursery)
     cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
 
     // Flower
-    cout << "🌸 FlowerPlanter::makePlant()\n";
-    auto flower = nursery->getFlowerFactory()->makePlant();
+    cout << "🌸 FlowerPlanter::planterMethod()\n";
+    auto flower = std::unique_ptr<Plant>(nursery->getFlowerFactory()->planterMethod("Rose"));
     delay(500);
     cout << "   Created: " << flower->getName() << " (" << flower->getType() << ")\n";
     cout << "   Water: " << flower->getWater() << " | Soil: " << flower->getSoil()
@@ -817,8 +821,8 @@ void plantLifecycleDemo(Nursery *nursery)
     delay(1000);
 
     // Herb
-    cout << "🌿 HerbPlanter::makePlant()\n";
-    auto herb = nursery->getHerbFactory()->makePlant();
+    cout << "🌿 HerbPlanter::planterMethod()\n";
+    auto herb = std::unique_ptr<Plant>(nursery->getHerbFactory()->planterMethod("Basil"));
     delay(500);
     cout << "   Created: " << herb->getName() << " (" << herb->getType() << ")\n";
     cout << "   Care Strategy: Different from flowers\n";
@@ -830,9 +834,9 @@ void plantLifecycleDemo(Nursery *nursery)
     delay(1000);
 
     // Tree
-    cout << "🌳 TreePlanter::makePlant()\n";
+    cout << "🌳 TreePlanter::planterMethod()\n";
     TreePlanter treePlanter;
-    auto tree = treePlanter.makePlant();
+    auto tree = std::unique_ptr<Plant>(treePlanter.planterMethod("Oak"));
     delay(500);
     cout << "   Created: " << tree->getName() << " (" << tree->getType() << ")\n";
     cout << "   Long-term growth requirements\n";
@@ -841,9 +845,9 @@ void plantLifecycleDemo(Nursery *nursery)
     delay(1000);
 
     // Succulent
-    cout << "🌵 SucculentPlanter::makePlant()\n";
+    cout << "🌵 SucculentPlanter::planterMethod()\n";
     SucculentPlanter succulentPlanter;
-    auto succulent = succulentPlanter.makePlant();
+    auto succulent = std::unique_ptr<Plant>(succulentPlanter.planterMethod("Aloe"));
     delay(500);
     cout << "   Created: " << succulent->getName() << " (" << succulent->getType() << ")\n";
     cout << "   Low water requirements\n";
@@ -976,7 +980,7 @@ void plantDecorationDemo(Nursery *nursery)
     // Base plant
     cout << "Step 1: Creating base plant\n";
     cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-    auto basePlant = nursery->getFlowerFactory()->makePlant();
+    auto basePlant = std::unique_ptr<Plant>(nursery->getFlowerFactory()->planterMethod("Rose"));
     delay(500);
     cout << "🌸 Base Plant: " << basePlant->getName() << "\n";
     cout << "   Type: " << basePlant->getType() << "\n\n";
@@ -1054,7 +1058,7 @@ void stockManagementDemo(Nursery *nursery)
     cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
     cout << "Creating AddStock command for Roses...\n";
     delay(500);
-    auto roses = nursery->getFlowerFactory()->makePlant();
+    auto roses = std::unique_ptr<Plant>(nursery->getFlowerFactory()->planterMethod("Rose"));
     cout << "Plant created: " << roses->getName() << "\n";
     delay(500);
     cout << "Executing AddStock command with quantity: 10\n";
@@ -1069,7 +1073,7 @@ void stockManagementDemo(Nursery *nursery)
     cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
     cout << "Creating AddStock command for Herbs...\n";
     delay(500);
-    auto herbs = nursery->getHerbFactory()->makePlant();
+    auto herbs = std::unique_ptr<Plant>(nursery->getHerbFactory()->planterMethod("Basil"));
     cout << "Plant created: " << herbs->getName() << "\n";
     delay(500);
     cout << "Executing AddStock command with quantity: 15\n";
@@ -1129,7 +1133,7 @@ void staffAssignmentDemo(Nursery *nursery)
     // Inventory change
     cout << "Event 2: New stock arrives\n";
     delay(500);
-    auto newPlant = nursery->getFlowerFactory()->makePlant();
+    auto newPlant = std::unique_ptr<Plant>(nursery->getFlowerFactory()->planterMethod("Rose"));
     cout << "  → Adding " << newPlant->getName() << " to inventory\n";
     delay(400);
     nursery->getStock()->Add(std::move(newPlant), 20);
@@ -1190,6 +1194,36 @@ int main(int argc, char *argv[])
 
     // Create nursery instance (Facade Pattern)
     Nursery *nursery = new Nursery();
+
+    // --- Staff setup: create and register staff with InfoDesk ---
+    InfoDesk *desk = nursery->getInfoDesk();
+
+    // Create staff members (use std::string variables because some constructors take string&)
+    std::string mgrName = "Alice Manager";
+    std::string mgrId = "MGR-001";
+    Manager *manager = new Manager(mgrName, mgrId, desk, nursery->getInventory());
+    desk->addStaff(manager);
+
+    std::string cashierName = "Bob Cashier";
+    std::string cashierId = "CSH-001";
+    Cashiers *cashier = new Cashiers(cashierName, cashierId, desk);
+    cashier->subject = nursery->getInventory();
+    desk->addStaff(cashier);
+
+    std::string gardenerName = "Carol Gardener";
+    std::string gardenerId = "GRD-001";
+    Gardener *gardener = new Gardener(gardenerName, gardenerId, desk);
+    gardener->subject = nursery->getInventory();
+    desk->addStaff(gardener);
+
+    std::string salesName = "Dave Sales";
+    std::string salesId = "SLS-001";
+    SalesStaff *sales = new SalesStaff(salesName, salesId, desk);
+    sales->subject = nursery->getInventory();
+    desk->addStaff(sales);
+
+    // Optionally notify the InfoDesk to rebuild its chain now that staff are present
+    desk->buildChain();
 
     bool running = true;
 
@@ -1265,7 +1299,13 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Cleanup
+    // Cleanup: delete staff created in main (they were registered with InfoDesk)
+    delete manager;
+    delete cashier;
+    delete gardener;
+    delete sales;
+
+    // Cleanup nursery
     delete nursery;
 
     return 0;

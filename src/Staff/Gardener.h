@@ -8,7 +8,7 @@ class Gardener : public Staff
 {
 public:
 	Inventory *subject;
-	Gardener(std::string &name, std::string &id, InfoDesk *infodesk);
+	Gardener(std::string &name, std::string &id, InfoDesk *infodesk, Inventory *inventory);
 	virtual ~Gardener();
 	void performDuty() override;
 	bool canHandleEnquiry() override;

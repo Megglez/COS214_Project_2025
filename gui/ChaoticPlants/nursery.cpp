@@ -11,11 +11,15 @@
 #include "../../src/Greenhouse/GiftWrap.h"
 #include "../../src/Greenhouse/Pot.h"
 #include "../../src/Greenhouse/SpecialArrangement.h"
+#include "../../src/Staff/Staff.h"
+#include "../../src/Staff/InfoDesk.h"
+#include "../../src/Staff/Cashiers.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QLabel>
 #include <QBrush>
+#include <QDateTime>
 #include <QPen>
 #include <QDebug>
 #include <QGraphicsTextItem>
@@ -66,6 +70,9 @@ public:
         mainBubble->setBrush(QBrush(Qt::white));
         mainBubble->setPen(QPen(Qt::black, 1.5));
         addToGroup(mainBubble);
+
+        // Set initial color based on customer state
+        updateColor();
 
         // Info box (initially hidden)
         infoBox = new QGraphicsRectItem(0, 0, 200, 100);
@@ -138,6 +145,43 @@ public:
         infoBox->setVisible(false);
         infoText->setVisible(false);
     }
+
+    void updateColor()
+    {
+        QColor bubbleColor = Qt::white; // Default color
+
+        if (!customer)
+        {
+            bubbleColor = Qt::white;
+        }
+        else if (!customer->getAction()) // Leaving
+        {
+            bubbleColor = QColor(255, 165, 0); // Orange
+        }
+        else
+        {
+            Action *action = customer->getAction();
+            std::string actionName = action->getActionName();
+
+            if (actionName == "Browsing")
+            {
+                bubbleColor = QColor(144, 238, 144); // Light green
+            }
+            else if (actionName == "Enquiring")
+            {
+                bubbleColor = QColor(173, 216, 230); // Light blue
+            }
+            else if (actionName == "Purchasing")
+            {
+                bubbleColor = QColor(255, 192, 203); // Pink
+            }
+        }
+
+        // Update all bubble colors
+        smallBubble1->setBrush(QBrush(bubbleColor));
+        smallBubble2->setBrush(QBrush(bubbleColor));
+        mainBubble->setBrush(QBrush(bubbleColor));
+    }
 };
 
 // Custom ellipse that shows bubble info on hover
@@ -182,6 +226,7 @@ NurseryWindow::NurseryWindow(QWidget *parent)
       view(nullptr),
       simulationTimer(nullptr),
       customerSpawnTimer(nullptr),
+      seasonTimer(nullptr),
       nurseryBackend(nullptr),
       isRunning(false),
       rng(std::random_device{}())
@@ -200,12 +245,26 @@ NurseryWindow::NurseryWindow(QWidget *parent)
     nurseryBackend = new Nursery(nullptr);
     qDebug() << "Backend nursery created successfully";
 
+    // Now update displays with initial data
+    qDebug() << "Updating inventory display...";
+    updateInventoryDisplay();
+    qDebug() << "Inventory display updated";
+
+    qDebug() << "Updating staff display...";
+    updateStaffDisplay();
+    qDebug() << "Staff display updated";
+
     // Setup timers
+    qDebug() << "Setting up timers...";
     simulationTimer = new QTimer(this);
     connect(simulationTimer, &QTimer::timeout, this, &NurseryWindow::updateSimulation);
 
     customerSpawnTimer = new QTimer(this);
     connect(customerSpawnTimer, &QTimer::timeout, this, &NurseryWindow::addCustomer);
+
+    // Season timer - change season every 30 seconds
+    seasonTimer = new QTimer(this);
+    connect(seasonTimer, &QTimer::timeout, this, &NurseryWindow::changeSeason);
 
     qDebug() << "Nursery Window initialized successfully!";
 }
@@ -241,11 +300,14 @@ void NurseryWindow::setupUI()
     pauseBtn = new QPushButton("Pause", this);
     resetBtn = new QPushButton("Reset", this);
     addCustomerBtn = new QPushButton("Add Customer", this);
+    changeSeasonBtn = new QPushButton("Change Season", this);
+    changeSeasonBtn->setStyleSheet("background-color: #FFA500; color: white; font-weight: bold;");
 
     connect(startBtn, &QPushButton::clicked, this, &NurseryWindow::startSimulation);
     connect(pauseBtn, &QPushButton::clicked, this, &NurseryWindow::pauseSimulation);
     connect(resetBtn, &QPushButton::clicked, this, &NurseryWindow::resetSimulation);
     connect(addCustomerBtn, &QPushButton::clicked, this, &NurseryWindow::addCustomer);
+    connect(changeSeasonBtn, &QPushButton::clicked, this, &NurseryWindow::changeSeason);
 
     pauseBtn->setEnabled(false);
 
@@ -253,6 +315,7 @@ void NurseryWindow::setupUI()
     controlLayout->addWidget(pauseBtn);
     controlLayout->addWidget(resetBtn);
     controlLayout->addWidget(addCustomerBtn);
+    controlLayout->addWidget(changeSeasonBtn);
     controlLayout->addStretch();
 
     // Create status panel
@@ -298,32 +361,43 @@ void NurseryWindow::setupScene()
     }
 
     // Add some visual elements to represent the nursery layout
-    // Draw entrance area
-    QGraphicsRectItem *entrance = scene->addRect(10, SCENE_HEIGHT - 60, 100, 50,
+    // Draw entrance area (moved 50px left)
+    QGraphicsRectItem *entrance = scene->addRect(-40, SCENE_HEIGHT - 60, 100, 50,
                                                  QPen(Qt::darkGreen, 2),
                                                  QBrush(QColor(144, 238, 144)));
     QGraphicsTextItem *entranceLabel = scene->addText("Entrance");
-    entranceLabel->setPos(25, SCENE_HEIGHT - 50);
+    entranceLabel->setPos(-25, SCENE_HEIGHT - 50);
 
-    // Draw info desk area (400 pixels above entrance)
-    QGraphicsRectItem *infoDesk = scene->addRect(10, SCENE_HEIGHT - 460, 100, 60,
-                                                 QPen(Qt::darkBlue, 2),
-                                                 QBrush(QColor(173, 216, 230)));
-    QGraphicsTextItem *infoDeskLabel = scene->addText("Info Desk");
-    infoDeskLabel->setPos(25, SCENE_HEIGHT - 445);
+    // Old queue block removed - no longer needed
 
-    // Draw checkout area
-    QGraphicsRectItem *checkout = scene->addRect(SCENE_WIDTH - 150, SCENE_HEIGHT - 80, 130, 70,
+    // Draw exit area (same size as entrance, moved 30px right)
+    QGraphicsRectItem *checkout = scene->addRect(SCENE_WIDTH - 90, SCENE_HEIGHT - 60, 100, 50,
                                                  QPen(Qt::darkRed, 2),
                                                  QBrush(QColor(255, 218, 185)));
-    QGraphicsTextItem *checkoutLabel = scene->addText("Cashier");
-    checkoutLabel->setPos(SCENE_WIDTH - 130, SCENE_HEIGHT - 60);
+    QGraphicsTextItem *checkoutLabel = scene->addText("Exit");
+    checkoutLabel->setPos(SCENE_WIDTH - 65, SCENE_HEIGHT - 50);
+
+    // Create Info Desk visualization box (between staff and inventory, moved 60px more to right)
+    int infoDeskBoxWidth = 150;
+    int infoDeskBoxHeight = 100;
+    int infoDeskBoxX = -40 + 200 + 90; // staffBoxX + staffBoxWidth + 90px spacing
+    int infoDeskBoxY = 40;
+
+    infoDeskBox = scene->addRect(infoDeskBoxX, infoDeskBoxY, infoDeskBoxWidth, infoDeskBoxHeight,
+                                 QPen(Qt::darkBlue, 2), QBrush(QColor(173, 216, 230)));
+    QGraphicsTextItem *infoDeskBoxLabel = scene->addText("Info Desk");
+    infoDeskBoxLabel->setPos(infoDeskBoxX + 35, infoDeskBoxY + 40);
+    infoDeskBoxLabel->setDefaultTextColor(Qt::darkBlue);
+    QFont infoDeskFont = infoDeskBoxLabel->font();
+    infoDeskFont.setPointSize(12);
+    infoDeskFont.setBold(true);
+    infoDeskBoxLabel->setFont(infoDeskFont);
 
     // Draw Inventory box under season label (right side, main white area)
     int invBoxWidth = 220;
     int invBoxHeight = 300;                       // Increased height for more content
-    int invBoxX = SCENE_WIDTH - invBoxWidth + 60; // Moved 60px to the right
-    int invBoxY = 40;                             // Moved 20px up from 60
+    int invBoxX = SCENE_WIDTH - invBoxWidth + 70; // Moved 70px to the right (10px more)
+    int invBoxY = 35;                             // Moved 25px up from 60 (5px more up)
 
     // Create background box
     inventoryBox = scene->addRect(invBoxX, invBoxY, invBoxWidth, invBoxHeight,
@@ -357,7 +431,96 @@ void NurseryWindow::setupScene()
     invTitle->setFont(QFont("Arial", 12, QFont::Bold));
     invTitle->setPos(invBoxX + 10, invBoxY - 25);
 
-    updateInventoryDisplay();
+    // Draw Staff Status box on left side
+    int staffBoxWidth = 200;
+    int staffBoxHeight = 200;
+    int staffBoxX = 10;
+    int staffBoxY = 40;
+
+    // Create background box for staff
+    staffBox = scene->addRect(staffBoxX, staffBoxY, staffBoxWidth, staffBoxHeight,
+                              QPen(Qt::darkGray, 2), QBrush(QColor(255, 250, 205)));
+
+    // Create scrollable content area for staff
+    staffScrollArea = new QScrollArea();
+    staffScrollArea->setFixedSize(staffBoxWidth - 4, staffBoxHeight - 4);
+    staffScrollArea->setStyleSheet("QScrollArea { background-color: #FFFACD; border: none; }");
+
+    // Create content label for staff text
+    staffContentLabel = new QLabel();
+    staffContentLabel->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    staffContentLabel->setMargin(5);
+    staffContentLabel->setWordWrap(true);
+    staffContentLabel->setStyleSheet("QLabel { background-color: #FFFACD; color: black; font-size: 11px; }");
+
+    // Set up scroll area with content
+    staffScrollArea->setWidget(staffContentLabel);
+    staffScrollArea->setWidgetResizable(true);
+    staffScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    staffScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    // Add scroll area to scene via proxy widget
+    staffProxy = scene->addWidget(staffScrollArea);
+    staffProxy->setPos(staffBoxX + 2, staffBoxY + 2);
+
+    // Add title
+    QGraphicsTextItem *staffTitle = scene->addText("Staff Status");
+    staffTitle->setDefaultTextColor(Qt::darkGreen);
+    staffTitle->setFont(QFont("Arial", 12, QFont::Bold));
+    staffTitle->setPos(staffBoxX + 10, staffBoxY - 25);
+
+    // Create Cashier block (7px left of exit)
+    int cashierBoxWidth = 100;
+    int cashierBoxHeight = 50;
+    int cashierBoxX = SCENE_WIDTH - 90 - cashierBoxWidth - 7; // 7px left of exit
+    int cashierBoxY = SCENE_HEIGHT - 60;
+
+    cashierBox = scene->addRect(cashierBoxX, cashierBoxY, cashierBoxWidth, cashierBoxHeight,
+                                QPen(Qt::darkMagenta, 2), QBrush(QColor(255, 192, 203)));
+    QGraphicsTextItem *cashierBoxLabel = scene->addText("Cashier");
+    cashierBoxLabel->setPos(cashierBoxX + 25, cashierBoxY + 15);
+    cashierBoxLabel->setDefaultTextColor(Qt::darkMagenta);
+    QFont cashierFont = cashierBoxLabel->font();
+    cashierFont.setPointSize(11);
+    cashierFont.setBold(true);
+    cashierBoxLabel->setFont(cashierFont);
+
+    // Create Cashier Queue display area (left of cashier box)
+    int queueBoxWidth = cashierBoxWidth;
+    int queueBoxHeight = 100;
+    int queueBoxX = cashierBoxX - queueBoxWidth - 5; // 5px left of cashier
+    int queueBoxY = cashierBoxY;
+
+    cashierQueueBox = scene->addRect(queueBoxX, queueBoxY, queueBoxWidth, queueBoxHeight,
+                                     QPen(Qt::gray, 1), QBrush(QColor(255, 255, 255, 200)));
+
+    // Create scrollable area for queue
+    cashierQueueScrollArea = new QScrollArea();
+    cashierQueueScrollArea->setFixedSize(queueBoxWidth - 4, queueBoxHeight - 4);
+    cashierQueueScrollArea->setStyleSheet("QScrollArea { background-color: white; border: none; }");
+
+    cashierQueueLabel = new QLabel();
+    cashierQueueLabel->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    cashierQueueLabel->setMargin(3);
+    cashierQueueLabel->setWordWrap(true);
+    cashierQueueLabel->setStyleSheet("QLabel { background-color: white; color: black; font-size: 10px; }");
+    cashierQueueLabel->setText("Queue: Empty");
+
+    cashierQueueScrollArea->setWidget(cashierQueueLabel);
+    cashierQueueScrollArea->setWidgetResizable(true);
+
+    cashierQueueProxy = scene->addWidget(cashierQueueScrollArea);
+    cashierQueueProxy->setPos(queueBoxX + 2, queueBoxY + 2);
+
+    QGraphicsTextItem *queueTitle = scene->addText("Cashier Queue");
+    queueTitle->setDefaultTextColor(Qt::darkGray);
+    QFont queueFont = queueTitle->font();
+    queueFont.setPointSize(9);
+    queueFont.setBold(true);
+    queueTitle->setFont(queueFont);
+    queueTitle->setPos(queueBoxX + 5, queueBoxY - 20);
+
+    // Note: updateInventoryDisplay() and updateStaffDisplay() will be called after nurseryBackend is initialized
 }
 
 void NurseryWindow::updateInventoryDisplay()
@@ -376,25 +539,30 @@ void NurseryWindow::updateInventoryDisplay()
     for (const auto &pair : map)
     {
         const std::string &name = pair.first;
+        const auto &plantPtr = pair.second.first;
         int qty = pair.second.second;
         QString plantLine = QString::fromStdString(name) + ": " + QString::number(qty);
 
-        // Categorize plants based on their names
-        if (name == "Rose" || name == "Tulip" || name == "Lily" || name == "Sunflower" || name == "Daisy")
+        // Categorize plants based on their actual type from the plant object
+        if (plantPtr)
         {
-            flowers << plantLine;
-        }
-        else if (name == "Basil" || name == "Mint" || name == "Rosemary" || name == "Thyme" || name == "Oregano")
-        {
-            herbs << plantLine;
-        }
-        else if (name == "Oak" || name == "Maple" || name == "Pine" || name == "Apple")
-        {
-            trees << plantLine;
-        }
-        else if (name == "Aloe" || name == "Cactus" || name == "Jade" || name == "Echeveria")
-        {
-            succulents << plantLine;
+            std::string plantType = plantPtr->getType();
+            if (plantType == "Flower")
+            {
+                flowers << plantLine;
+            }
+            else if (plantType == "Herb")
+            {
+                herbs << plantLine;
+            }
+            else if (plantType == "Tree")
+            {
+                trees << plantLine;
+            }
+            else if (plantType == "Succulent")
+            {
+                succulents << plantLine;
+            }
         }
     }
 
@@ -423,11 +591,134 @@ void NurseryWindow::updateInventoryDisplay()
     inventoryContentLabel->setText(text.trimmed());
 }
 
+void NurseryWindow::updateStaffDisplay()
+{
+    if (!nurseryBackend || !staffContentLabel)
+        return;
+
+    InfoDesk *desk = nurseryBackend->getInfoDesk();
+    if (!desk)
+        return;
+
+    try
+    {
+        std::vector<Staff *> allStaff = desk->getAllStaff();
+        QString text;
+
+        for (Staff *staff : allStaff)
+        {
+            if (!staff)
+                continue;
+
+            std::string nameStr = staff->getName();
+            std::string typeStr = staff->getStaffType();
+            // Prefer runtime availability for display to avoid transient state-toggle issues
+            std::string stateStr = staff->getAvailability() ? std::string("Available") : std::string("Busy");
+
+            QString name = QString::fromStdString(nameStr);
+            QString type = QString::fromStdString(typeStr);
+            QString state = QString::fromStdString(stateStr);
+            bool available = staff->getAvailability();
+
+            // Color code by availability
+            QString color = available ? "green" : "red";
+            QString statusIcon = available ? "✓" : "✗";
+
+            text += QString("<b>%1</b> (%2)<br>")
+                        .arg(name)
+                        .arg(type);
+            text += QString("<span style='color:%1;'>%2 %3</span><br>")
+                        .arg(color)
+                        .arg(statusIcon)
+                        .arg(state);
+
+            // Show current customer if any
+            Customer *currentCust = staff->getCurrentCustomer();
+            if (currentCust)
+            {
+                text += QString("<i>→ Customer #%1</i><br>")
+                            .arg(currentCust->getId());
+            }
+
+            text += "<br>";
+        }
+
+        // Show cashier queue if exists
+        Cashiers *cashier = nurseryBackend->getCashier();
+        if (cashier && cashier->getQueueSize() > 0)
+        {
+            text += QString("<b style='color:darkred;'>Cashier Queue: %1</b><br>")
+                        .arg(cashier->getQueueSize());
+        }
+
+        staffContentLabel->setText(text.trimmed());
+    }
+    catch (const std::exception &e)
+    {
+        qDebug() << "Error in updateStaffDisplay:" << e.what();
+        staffContentLabel->setText("Error loading staff data");
+    }
+    catch (...)
+    {
+        qDebug() << "Unknown error in updateStaffDisplay";
+        staffContentLabel->setText("Error loading staff data");
+    }
+}
+
+void NurseryWindow::updateCashierQueue()
+{
+    if (!cashierQueueLabel)
+        return;
+
+    // Build list of customers who are purchasing (in queue or being served)
+    std::vector<Customer *> purchasingCustomers;
+
+    for (const auto &cv : customerVisuals)
+    {
+        if (cv.customer && cv.customer->getAction())
+        {
+            Action *action = cv.customer->getAction();
+            if (action->getActionName() == "Purchasing")
+            {
+                const std::vector<Plant *> &basket = cv.customer->getBasket();
+                if (!basket.empty())
+                {
+                    purchasingCustomers.push_back(cv.customer);
+                }
+            }
+        }
+    }
+
+    // Build display text
+    QString text;
+    if (purchasingCustomers.empty())
+    {
+        text = "Cashier Queue: Empty";
+    }
+    else
+    {
+        text = QString("Cashier Queue (%1):\n\n").arg(purchasingCustomers.size());
+        for (size_t i = 0; i < purchasingCustomers.size() && i < 10; ++i) // Show max 10
+        {
+            Customer *c = purchasingCustomers[i];
+            const std::vector<Plant *> &basket = c->getBasket();
+            text += QString("Customer #%1 (%2 items)\n").arg(c->getId()).arg(basket.size());
+        }
+        if (purchasingCustomers.size() > 10)
+        {
+            text += QString("... +%1 more").arg(purchasingCustomers.size() - 10);
+        }
+    }
+
+    cashierQueueLabel->setText(text);
+}
+
 void NurseryWindow::startSimulation()
 {
     isRunning = true;
     simulationTimer->start(50);      // Update every 50ms
     customerSpawnTimer->start(3000); // Add customer every 3 seconds
+    seasonTimer->start(30000);       // Change season every 30 seconds
 
     startBtn->setEnabled(false);
     pauseBtn->setEnabled(true);
@@ -439,10 +730,61 @@ void NurseryWindow::pauseSimulation()
     isRunning = false;
     simulationTimer->stop();
     customerSpawnTimer->stop();
+    seasonTimer->stop();
 
     startBtn->setEnabled(true);
     pauseBtn->setEnabled(false);
     statusLabel->setText("Status: Paused");
+}
+
+void NurseryWindow::changeSeason()
+{
+    if (!nurseryBackend)
+        return;
+
+    Seasons *currentSeason = nurseryBackend->getCurrentSeason();
+    if (!currentSeason)
+        return;
+
+    std::string currentSeasonName = currentSeason->getSeason();
+    qDebug() << "Changing season from" << QString::fromStdString(currentSeasonName);
+    std::cout << "=== Season Change ===" << std::endl;
+    std::cout << "Previous season: " << currentSeasonName << std::endl;
+
+    // Trigger season change in backend
+    currentSeason->handleChange(nurseryBackend);
+
+    // Get new season and update display
+    Seasons *newSeason = nurseryBackend->getCurrentSeason();
+    if (newSeason)
+    {
+        std::string newSeasonName = newSeason->getSeason();
+        qDebug() << "Season changed to" << QString::fromStdString(newSeasonName);
+        std::cout << "New season: " << newSeasonName << std::endl;
+        seasonLabel->setText(QString("Season: %1").arg(QString::fromStdString(newSeasonName)));
+
+        // Update season label color based on season
+        if (newSeasonName == "Spring")
+        {
+            seasonLabel->setStyleSheet("font-weight: bold; font-size: 14pt; color: #4CAF50;"); // Green
+        }
+        else if (newSeasonName == "Summer")
+        {
+            seasonLabel->setStyleSheet("font-weight: bold; font-size: 14pt; color: #FFC107;"); // Yellow
+        }
+        else if (newSeasonName == "Autumn")
+        {
+            seasonLabel->setStyleSheet("font-weight: bold; font-size: 14pt; color: #FF5722;"); // Orange
+        }
+        else if (newSeasonName == "Winter")
+        {
+            seasonLabel->setStyleSheet("font-weight: bold; font-size: 14pt; color: #2196F3;"); // Blue
+        }
+    }
+
+    // Update inventory display to reflect seasonal changes
+    updateInventoryDisplay();
+    std::cout << "Inventory updated for new season" << std::endl;
 }
 
 void NurseryWindow::resetSimulation()
@@ -478,6 +820,14 @@ void NurseryWindow::addCustomer()
         return;
     }
 
+    // Check customer limit (max 20 customers)
+    const std::vector<Customer *> &activeCustomers = nurseryBackend->getActiveCustomers();
+    if (activeCustomers.size() >= 20)
+    {
+        qDebug() << "Nursery at capacity (20 customers). Cannot add more customers.";
+        return;
+    }
+
     qDebug() << "Creating new customer...";
 
     // Create customer in backend
@@ -498,38 +848,83 @@ void NurseryWindow::addCustomer()
             qDebug() << "Action:" << QString::fromStdString(action->getActionName());
 
             Browse *browseAction = dynamic_cast<Browse *>(action);
-            if (browseAction)
+            Enquire *enquireAction = dynamic_cast<Enquire *>(action);
+
+            // Check if customer wants plants that are out of stock
+            bool plantOutOfStock = false;
+            if (browseAction && nurseryBackend->getInventory())
             {
                 std::vector<Plant *> plants = browseAction->getPlantsToBuy();
-                std::vector<int> quantities = browseAction->getQuantities();
-                qDebug() << "IMMEDIATELY after creation: Browse has" << plants.size() << "plants";
-                for (size_t i = 0; i < plants.size(); ++i)
+                Inventory *inventory = nurseryBackend->getInventory();
+                auto &invMap = inventory->getInventory();
+
+                for (Plant *plant : plants)
                 {
-                    if (plants[i])
+                    if (plant)
                     {
-                        qDebug() << "  -" << quantities[i] << "x" << QString::fromStdString(plants[i]->getName());
+                        auto it = invMap.find(plant->getName());
+                        if (it != invMap.end() && it->second.second == 0)
+                        {
+                            qDebug() << "Customer" << newCustomer->getId() << "wants" << QString::fromStdString(plant->getName()) << "but inventory is 0";
+                            std::cout << "Customer " << newCustomer->getId() << " wants " << plant->getName() << " but inventory is 0. Sending to exit." << std::endl;
+                            plantOutOfStock = true;
+                            break;
+                        }
                     }
                 }
-
-                // Start the browsing timer
-                action->handle(newCustomer);
-                qDebug() << "Browse timer started";
             }
-            else
+
+            // If plant is out of stock, customer should leave immediately
+            if (plantOutOfStock)
             {
-                // For non-browse actions, just handle normally
-                action->handle(newCustomer);
+                qDebug() << "Customer" << newCustomer->getId() << "cannot find desired plants, leaving immediately";
+                // Set customer to leaving state
+                newCustomer->setAction(nullptr);
+            }
+
+            if (!plantOutOfStock)
+            {
+                if (browseAction)
+                {
+                    std::vector<Plant *> plants = browseAction->getPlantsToBuy();
+                    std::vector<int> quantities = browseAction->getQuantities();
+                    qDebug() << "IMMEDIATELY after creation: Browse has" << plants.size() << "plants";
+                    for (size_t i = 0; i < plants.size(); ++i)
+                    {
+                        if (plants[i])
+                        {
+                            qDebug() << "  -" << quantities[i] << "x" << QString::fromStdString(plants[i]->getName());
+                        }
+                    }
+
+                    // Start the browsing timer
+                    action->handle(newCustomer);
+                    qDebug() << "Browse timer started";
+                }
+                else if (enquireAction)
+                {
+                    // Customer has enquiry - don't assign staff yet, wait until they reach info desk
+                    qDebug() << "Customer enquiring:" << QString::fromStdString(enquireAction->getEnquiryQuestion());
+                    // DON'T call action->handle() here - staff will be assigned when customer reaches info desk
+                }
+                else
+                {
+                    // For other actions, just handle normally
+                    action->handle(newCustomer);
+                }
             }
         }
 
         // Create visual representation
         CustomerVisual cv;
         cv.customer = newCustomer;
+        cv.isLeaving = (newCustomer->getAction() == nullptr); // Set leaving flag if no action
 
         // Create thinking bubble first (so we can pass it to CustomerDot)
         cv.bubble = new ThinkingBubble(this, newCustomer);
         scene->addItem(cv.bubble);
         cv.bubble->setPos(60, SCENE_HEIGHT - 35 - 30); // Position above the dot
+        cv.bubble->updateColor();                      // Set initial color based on state
 
         // Create blue dot for customer with hover capability
         cv.dot = new CustomerDot(0, 0, CUSTOMER_SIZE, CUSTOMER_SIZE, cv.bubble);
@@ -538,8 +933,8 @@ void NurseryWindow::addCustomer()
         cv.dot->setOpacity(0.9);
         scene->addItem(cv.dot);
 
-        // Start at entrance (bottom left)
-        cv.dot->setPos(60, SCENE_HEIGHT - 35);
+        // Start at entrance (bottom left, adjusted for new position)
+        cv.dot->setPos(10, SCENE_HEIGHT - 35);
 
         // Set random initial target
         std::uniform_real_distribution<qreal> distX(100, SCENE_WIDTH - 100);
@@ -551,7 +946,11 @@ void NurseryWindow::addCustomer()
         cv.velocityY = 0;
 
         customerVisuals.append(cv);
-        customerCountLabel->setText(QString("Customers: %1").arg(customerVisuals.size()));
+        if (nurseryBackend)
+        {
+            const std::vector<Customer *> &activeCustomers = nurseryBackend->getActiveCustomers();
+            customerCountLabel->setText(QString("Customers: %1/20").arg(activeCustomers.size()));
+        }
         qDebug() << "Customer visual added. Total customers:" << customerVisuals.size();
     }
     else
@@ -576,59 +975,497 @@ void NurseryWindow::updateSimulation()
     for (int i = customerVisuals.size() - 1; i >= 0; --i)
     {
         updateCustomerMovement(customerVisuals[i]);
+
+        // Remove customer visual if customer is null (departed)
+        if (!customerVisuals[i].customer || !customerVisuals[i].dot)
+        {
+            customerVisuals.removeAt(i);
+        }
+    }
+
+    // Update customer count display
+    if (nurseryBackend)
+    {
+        const std::vector<Customer *> &activeCustomers = nurseryBackend->getActiveCustomers();
+        customerCountLabel->setText(QString("Customers: %1/20").arg(activeCustomers.size()));
     }
 
     // Update thinking bubble information if any are displayed
     updateThinkingBubbles();
 
-    // Update inventory display every tick
+    // Update inventory, staff, and cashier queue displays every tick
     updateInventoryDisplay();
+    updateStaffDisplay();
+    updateCashierQueue();
+
+    // Process staff duties (cashier checkout, etc.)
+    if (nurseryBackend && nurseryBackend->getInfoDesk())
+    {
+        InfoDesk *desk = nurseryBackend->getInfoDesk();
+        std::vector<Staff *> allStaff = desk->getAllStaff();
+        for (Staff *staff : allStaff)
+        {
+            // Only perform duty if staff currently has a customer
+            if (staff && staff->getCurrentCustomer())
+            {
+                staff->performDuty();
+            }
+        }
+
+        // Process waiting customers at info desk
+        desk->processWaitingCustomers();
+    }
 }
 void NurseryWindow::updateCustomerMovement(CustomerVisual &cv)
 {
-    if (!cv.dot)
+    if (!cv.dot || !cv.customer)
         return;
 
     QPointF currentPos = cv.dot->pos();
 
-    // Calculate distance to target
-    qreal dx = cv.targetX - currentPos.x();
-    qreal dy = cv.targetY - currentPos.y();
-    qreal distance = std::sqrt(dx * dx + dy * dy);
+    // Check customer's current action
+    Action *action = cv.customer->getAction();
+    bool isPurchasing = (action && action->getActionName() == "Purchasing");
+    bool isEnquiring = (action && action->getActionName() == "Enquiring");
 
-    // If close to target, pick a new random target
-    if (distance < 30)
+    // Debug: Log current action state
+    if (action && cv.infoDeskArrivalTime > 0)
     {
-        std::uniform_real_distribution<qreal> distX(100, SCENE_WIDTH - 100);
-        std::uniform_real_distribution<qreal> distY(150, SCENE_HEIGHT - 100);
-
-        cv.targetX = distX(rng);
-        cv.targetY = distY(rng);
-
-        dx = cv.targetX - currentPos.x();
-        dy = cv.targetY - currentPos.y();
-        distance = std::sqrt(dx * dx + dy * dy);
+        qDebug() << "Customer" << cv.customer->getId() << "current action:" << QString::fromStdString(action->getActionName());
     }
 
-    // Move towards target
-    if (distance > 0)
+    // Handle Enquiring customers - move to Info Desk and wait
+    // Skip if customer has already finished at info desk
+    if (isEnquiring && !cv.finishedAtInfoDesk)
     {
-        cv.velocityX = (dx / distance) * MOVEMENT_SPEED;
-        cv.velocityY = (dy / distance) * MOVEMENT_SPEED;
+        // Info Desk position (center of the info desk box) - updated with 60px offset
+        qreal infoDeskX = -40 + 200 + 90 + 75; // staffBoxX + staffBoxWidth + spacing(90px) + half width
+        qreal infoDeskY = 90;                  // Center Y of info desk box
 
-        qreal newX = currentPos.x() + cv.velocityX;
-        qreal newY = currentPos.y() + cv.velocityY;
+        // Calculate distance to info desk
+        qreal dx = infoDeskX - currentPos.x();
+        qreal dy = infoDeskY - currentPos.y();
+        qreal distance = std::sqrt(dx * dx + dy * dy);
 
-        // Keep within bounds
-        newX = qMax(0.0, qMin(newX, SCENE_WIDTH - CUSTOMER_SIZE));
-        newY = qMax(0.0, qMin(newY, SCENE_HEIGHT - CUSTOMER_SIZE));
-
-        cv.dot->setPos(newX, newY);
-
-        // Move thinking bubble with customer
-        if (cv.bubble)
+        // If customer has arrived at desk (timer started), check if time is up FIRST
+        if (cv.infoDeskArrivalTime > 0)
         {
-            cv.bubble->setPos(newX, newY - 30);
+            qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+            qint64 elapsedTime = currentTime - cv.infoDeskArrivalTime;
+
+            if (elapsedTime >= 5000) // 5 seconds = 5000 milliseconds
+            {
+                qDebug() << "Customer" << cv.customer->getId() << "finished at info desk, moving away";
+
+                // Reset timer FIRST before any other operations
+                cv.infoDeskArrivalTime = 0;
+                cv.finishedAtInfoDesk = true; // Mark as finished so they won't return to desk
+
+                // Set a new target position away from the info desk so they move away
+                std::uniform_real_distribution<qreal> distX(100, SCENE_WIDTH - 100);
+                std::uniform_real_distribution<qreal> distY(200, SCENE_HEIGHT - 100);
+                cv.targetX = distX(rng);
+                cv.targetY = distY(rng);
+
+                qDebug() << "Customer moving to new target:" << cv.targetX << "," << cv.targetY;
+
+                // Immediately start moving away from info desk
+                qreal dxMove = cv.targetX - currentPos.x();
+                qreal dyMove = cv.targetY - currentPos.y();
+                qreal dist = std::sqrt(dxMove * dxMove + dyMove * dyMove);
+
+                if (dist > 0)
+                {
+                    cv.velocityX = (dxMove / dist) * MOVEMENT_SPEED;
+                    cv.velocityY = (dyMove / dist) * MOVEMENT_SPEED;
+
+                    qreal newX = currentPos.x() + cv.velocityX;
+                    qreal newY = currentPos.y() + cv.velocityY;
+
+                    cv.dot->setPos(newX, newY);
+                    qDebug() << "  Customer moved to" << newX << "," << newY;
+
+                    if (cv.bubble)
+                    {
+                        cv.bubble->setPos(newX, newY - 30);
+                    }
+                }
+
+                // Properly release the staff through the backend
+                Staff *assignedStaff = cv.customer->getAssignedStaff();
+                if (assignedStaff && nurseryBackend && nurseryBackend->getInfoDesk())
+                {
+                    qDebug() << "  Releasing staff" << QString::fromStdString(assignedStaff->getName()) << "for customer" << cv.customer->getId();
+
+                    try
+                    {
+                        // Clear staff's current customer first
+                        assignedStaff->setCurrentCustomer(nullptr);
+                        // Set staff availability to true
+                        assignedStaff->setAvailability(true);
+                        // Clear the customer's assignment
+                        cv.customer->setAssignedStaff(nullptr);
+                        // Notify InfoDesk that staff is available again
+                        nurseryBackend->getInfoDesk()->notifyStaffAvailable(assignedStaff);
+                        qDebug() << "  Staff released successfully";
+                    }
+                    catch (...)
+                    {
+                        qDebug() << "  ERROR: Exception while releasing staff";
+                        // Clear customer assignment even if staff operations fail
+                        cv.customer->setAssignedStaff(nullptr);
+                    }
+                }
+
+                // Transition customer to next action after finishing at info desk
+                if (cv.customer)
+                {
+                    qDebug() << "  Customer" << cv.customer->getId() << "transitioning to next action";
+                    cv.customer->processNextAction();
+
+                    // Check if customer is now leaving (action is null)
+                    if (!cv.customer->getAction())
+                    {
+                        qDebug() << "  Customer" << cv.customer->getId() << "decided to leave after enquiring";
+                        cv.isLeaving = true; // Mark customer as leaving so they walk to exit
+                    }
+                    else
+                    {
+                        qDebug() << "  Customer new action:" << cv.customer->getAction()->getActionName().c_str();
+                    }
+
+                    // Update bubble color after state change
+                    if (cv.bubble)
+                    {
+                        cv.bubble->updateColor();
+                    }
+                }
+
+                // Return immediately after transition to avoid accessing stale state
+                return;
+            }
+            // If customer is still waiting at desk (timer running but not expired), stay at the info desk position
+            else
+            {
+                // Customer is still waiting at info desk, don't move
+                qDebug() << "Customer" << cv.customer->getId() << "waiting at desk, elapsed:" << elapsedTime << "ms";
+                return;
+            }
+        }
+
+        // If customer reached info desk while enquiring (and timer not started)
+        if (distance < 30 && isEnquiring && cv.infoDeskArrivalTime == 0)
+        {
+            // Start the timer and assign staff (even if already assigned from elsewhere)
+            cv.infoDeskArrivalTime = QDateTime::currentMSecsSinceEpoch();
+            qDebug() << "Customer" << cv.customer->getId() << "arrived at info desk, starting 5s timer";
+
+            // Assign staff if not already assigned
+            if (nurseryBackend && nurseryBackend->getInfoDesk())
+            {
+                if (!cv.customer->getAssignedStaff())
+                {
+                    qDebug() << "  Assigning staff to customer" << cv.customer->getId();
+                    nurseryBackend->getInfoDesk()->handleCustomer(cv.customer);
+                }
+                else
+                {
+                    qDebug() << "  Customer" << cv.customer->getId() << "already has staff assigned";
+                }
+            }
+
+            // Staff is already set to busy by the backend's assistCustomer() method
+            // No need to call changeState() here as it would toggle the state incorrectly
+            return; // Stay at desk this frame
+        }
+        else if (distance >= 30 && cv.infoDeskArrivalTime == 0)
+        {
+            // Still moving toward info desk
+            cv.velocityX = (dx / distance) * MOVEMENT_SPEED;
+            cv.velocityY = (dy / distance) * MOVEMENT_SPEED;
+
+            qreal newX = currentPos.x() + cv.velocityX;
+            qreal newY = currentPos.y() + cv.velocityY;
+
+            cv.dot->setPos(newX, newY);
+
+            if (cv.bubble)
+            {
+                cv.bubble->setPos(newX, newY - 30);
+            }
+            return;
+        }
+    }
+
+    if (isPurchasing)
+    {
+        // First, check if customer has items in basket
+        const std::vector<Plant *> &basket = cv.customer->getBasket();
+        if (basket.empty())
+        {
+            // Customer has nothing to purchase, send them to exit immediately
+            qDebug() << "Customer" << cv.customer->getId() << "has empty basket, leaving immediately";
+
+            if (nurseryBackend)
+            {
+                nurseryBackend->handleCustomerDeparture(cv.customer);
+            }
+
+            scene->removeItem(cv.dot);
+            delete cv.dot;
+            cv.dot = nullptr;
+
+            if (cv.bubble)
+            {
+                scene->removeItem(cv.bubble);
+                delete cv.bubble;
+                cv.bubble = nullptr;
+            }
+
+            // Delete customer object
+            delete cv.customer;
+            cv.customer = nullptr;
+            return;
+        }
+
+        // Cashier position (center of cashier box)
+        qreal cashierX = SCENE_WIDTH - 90 - 100 - 7 + 50; // Center of cashier box
+        qreal cashierY = SCENE_HEIGHT - 35;               // Center of cashier box
+
+        // Calculate distance to cashier
+        qreal dxCashier = cashierX - currentPos.x();
+        qreal dyCashier = cashierY - currentPos.y();
+        qreal distanceToCashier = std::sqrt(dxCashier * dxCashier + dyCashier * dyCashier);
+
+        // If at cashier, wait for 3 seconds while basket is processed
+        if (distanceToCashier < 30 && cv.cashierArrivalTime == 0)
+        {
+            cv.cashierArrivalTime = QDateTime::currentMSecsSinceEpoch();
+            qDebug() << "Customer" << cv.customer->getId() << "arrived at cashier - ADDED TO QUEUE";
+            std::cout << "Customer " << cv.customer->getId() << " entered cashier queue" << std::endl;
+
+            // Update cashier staff status to Busy
+            if (nurseryBackend && nurseryBackend->getCashier())
+            {
+                Cashiers *cashier = nurseryBackend->getCashier();
+                cashier->setAvailability(false);
+                cashier->changeState(); // Change to Busy
+                std::cout << "Cashier " << cashier->getName() << " is now Busy with Customer " << cv.customer->getId() << std::endl;
+            }
+
+            updateCashierQueue();
+            return;
+        }
+
+        if (cv.cashierArrivalTime > 0)
+        {
+            qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+            qint64 elapsedTime = currentTime - cv.cashierArrivalTime;
+
+            if (elapsedTime >= 3000) // 3 seconds
+            {
+                qDebug() << "Customer" << cv.customer->getId() << "finished at cashier - REMOVED FROM QUEUE";
+                std::cout << "Customer " << cv.customer->getId() << " left cashier queue (basket cleared)" << std::endl;
+
+                // Clear the basket
+                cv.customer->clearBasket();
+                cv.cashierArrivalTime = 0;
+
+                // Update cashier staff status back to Available
+                if (nurseryBackend && nurseryBackend->getCashier())
+                {
+                    Cashiers *cashier = nurseryBackend->getCashier();
+                    cashier->setAvailability(true);
+                    cashier->changeState(); // Change to Available
+                    std::cout << "Cashier " << cashier->getName() << " is now Available" << std::endl;
+                }
+
+                updateCashierQueue();
+
+                // Now move to exit
+            }
+            else
+            {
+                // Stay at cashier
+                return;
+            }
+        }
+
+        // If not yet at cashier, move to cashier first
+        if (distanceToCashier >= 30)
+        {
+            cv.velocityX = (dxCashier / distanceToCashier) * MOVEMENT_SPEED * 1.5;
+            cv.velocityY = (dyCashier / distanceToCashier) * MOVEMENT_SPEED * 1.5;
+
+            qreal newX = currentPos.x() + cv.velocityX;
+            qreal newY = currentPos.y() + cv.velocityY;
+
+            cv.dot->setPos(newX, newY);
+
+            if (cv.bubble)
+            {
+                cv.bubble->setPos(newX, newY - 30);
+            }
+            return;
+        }
+
+        // After cashier, move to exit
+        qreal exitX = SCENE_WIDTH - 40;  // Center of 100px wide exit box
+        qreal exitY = SCENE_HEIGHT - 35; // Center of 50px tall exit box
+
+        // Calculate distance to exit
+        qreal dx = exitX - currentPos.x();
+        qreal dy = exitY - currentPos.y();
+        qreal distance = std::sqrt(dx * dx + dy * dy);
+
+        // If customer reached the exit, remove them
+        if (distance < 40)
+        {
+            qDebug() << "Customer" << cv.customer->getId() << "reached exit. Removing from nursery.";
+            std::cout << "Customer " << cv.customer->getId() << " left the nursery" << std::endl;
+
+            // Handle customer departure in backend (this updates count and deletes customer)
+            if (nurseryBackend)
+            {
+                nurseryBackend->handleCustomerDeparture(cv.customer);
+            }
+
+            // Remove visual representation
+            scene->removeItem(cv.dot);
+            delete cv.dot;
+            cv.dot = nullptr;
+
+            if (cv.bubble)
+            {
+                scene->removeItem(cv.bubble);
+                delete cv.bubble;
+                cv.bubble = nullptr;
+            }
+
+            cv.customer = nullptr; // Customer is already deleted by handleCustomerDeparture
+
+            // Update cashier queue display
+            updateCashierQueue();
+            return;
+        }
+
+        // Move toward exit
+        if (distance > 0)
+        {
+            cv.velocityX = (dx / distance) * MOVEMENT_SPEED * 1.5; // Move faster to exit
+            cv.velocityY = (dy / distance) * MOVEMENT_SPEED * 1.5;
+
+            qreal newX = currentPos.x() + cv.velocityX;
+            qreal newY = currentPos.y() + cv.velocityY;
+
+            cv.dot->setPos(newX, newY);
+
+            if (cv.bubble)
+            {
+                cv.bubble->setPos(newX, newY - 30);
+            }
+        }
+    }
+    else
+    {
+        // Check if customer is leaving (decided to leave after enquiring)
+        if (cv.isLeaving)
+        {
+            // Move to exit
+            qreal exitX = SCENE_WIDTH - 40;
+            qreal exitY = SCENE_HEIGHT - 35;
+
+            qreal dx = exitX - currentPos.x();
+            qreal dy = exitY - currentPos.y();
+            qreal distance = std::sqrt(dx * dx + dy * dy);
+
+            // If customer reached the exit, remove them
+            if (distance < 40)
+            {
+                qDebug() << "Customer" << cv.customer->getId() << "reached exit after deciding to leave. Removing from nursery.";
+
+                // Handle customer departure in backend (removes from active list)
+                if (nurseryBackend)
+                {
+                    nurseryBackend->handleCustomerDeparture(cv.customer);
+                }
+
+                // Remove visual representation
+                scene->removeItem(cv.dot);
+                delete cv.dot;
+                cv.dot = nullptr;
+
+                if (cv.bubble)
+                {
+                    scene->removeItem(cv.bubble);
+                    delete cv.bubble;
+                    cv.bubble = nullptr;
+                }
+
+                // Delete customer object (safe now because we're not in customer's execution context)
+                delete cv.customer;
+                cv.customer = nullptr;
+                return;
+            }
+
+            // Move toward exit
+            if (distance > 0)
+            {
+                cv.velocityX = (dx / distance) * MOVEMENT_SPEED * 1.5;
+                cv.velocityY = (dy / distance) * MOVEMENT_SPEED * 1.5;
+
+                qreal newX = currentPos.x() + cv.velocityX;
+                qreal newY = currentPos.y() + cv.velocityY;
+
+                cv.dot->setPos(newX, newY);
+
+                if (cv.bubble)
+                {
+                    cv.bubble->setPos(newX, newY - 30);
+                }
+            }
+            return;
+        }
+
+        // Normal browsing/enquiring behavior - random movement
+        qreal dx = cv.targetX - currentPos.x();
+        qreal dy = cv.targetY - currentPos.y();
+        qreal distance = std::sqrt(dx * dx + dy * dy);
+
+        // If close to target, pick a new random target
+        if (distance < 30)
+        {
+            std::uniform_real_distribution<qreal> distX(100, SCENE_WIDTH - 100);
+            std::uniform_real_distribution<qreal> distY(150, SCENE_HEIGHT - 100);
+
+            cv.targetX = distX(rng);
+            cv.targetY = distY(rng);
+
+            dx = cv.targetX - currentPos.x();
+            dy = cv.targetY - currentPos.y();
+            distance = std::sqrt(dx * dx + dy * dy);
+        }
+
+        // Move towards target
+        if (distance > 0)
+        {
+            cv.velocityX = (dx / distance) * MOVEMENT_SPEED;
+            cv.velocityY = (dy / distance) * MOVEMENT_SPEED;
+
+            qreal newX = currentPos.x() + cv.velocityX;
+            qreal newY = currentPos.y() + cv.velocityY;
+
+            // Keep within bounds
+            newX = qMax(0.0, qMin(newX, SCENE_WIDTH - CUSTOMER_SIZE));
+            newY = qMax(0.0, qMin(newY, SCENE_HEIGHT - CUSTOMER_SIZE));
+
+            cv.dot->setPos(newX, newY);
+
+            // Move thinking bubble with customer
+            if (cv.bubble)
+            {
+                cv.bubble->setPos(newX, newY - 30);
+            }
         }
     }
 }
@@ -647,7 +1484,11 @@ void NurseryWindow::removeCustomerVisual(Customer *customer)
                 delete customerVisuals[i].bubble;
             }
             customerVisuals.removeAt(i);
-            customerCountLabel->setText(QString("Customers: %1").arg(customerVisuals.size()));
+            if (nurseryBackend)
+            {
+                const std::vector<Customer *> &activeCustomers = nurseryBackend->getActiveCustomers();
+                customerCountLabel->setText(QString("Customers: %1/20").arg(activeCustomers.size()));
+            }
             break;
         }
     }
@@ -655,11 +1496,12 @@ void NurseryWindow::removeCustomerVisual(Customer *customer)
 
 void NurseryWindow::updateThinkingBubbles()
 {
-    // Refresh info in any expanded thinking bubbles to reflect state changes
+    // Refresh info and colors in any thinking bubbles to reflect state changes
     for (auto &cv : customerVisuals)
     {
         if (cv.bubble)
         {
+            cv.bubble->updateColor();
             cv.bubble->refreshInfo();
         }
     }

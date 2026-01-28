@@ -58,15 +58,21 @@ private:
      */
     Customer *currentCustomer;
 
+    /**
+     * @brief Flag indicating if this Browse owns the plant pointers (cloned)
+     */
+    bool ownsPlants;
+
 public:
     /**
      * @brief Construct a Browse action for a single plant
      * @param plant Pointer to the plant to browse
      * @param quantity Desired quantity of the plant
+     * @param ownsPlantPointers If true, Browse will delete plants in destructor
      *
      * Creates a browsing action with one plant and initializes the timer.
      */
-    Browse(Plant *plant, int quantity) : Action("Browsing"), QObject(nullptr), currentCustomer(nullptr)
+    Browse(Plant *plant, int quantity, bool ownsPlantPointers = true) : Action("Browsing"), QObject(nullptr), currentCustomer(nullptr), ownsPlants(ownsPlantPointers)
     {
         if (plant)
         {
@@ -81,20 +87,30 @@ public:
      * @brief Construct a Browse action for multiple plants
      * @param plants Vector of plant pointers to browse
      * @param quants Vector of desired quantities for each plant
+     * @param ownsPlantPointers If true, Browse will delete plants in destructor
      *
      * Creates a browsing action with multiple plants and initializes the timer.
      * The plants vector can contain decorated plants (GiftWrap, Pot, etc.).
      */
-    Browse(std::vector<Plant *> plants, std::vector<int> quants) : Action("Browsing"), QObject(nullptr), plantsToBuy(plants), quantities(quants), currentCustomer(nullptr)
+    Browse(std::vector<Plant *> plants, std::vector<int> quants, bool ownsPlantPointers = true) : Action("Browsing"), QObject(nullptr), plantsToBuy(plants), quantities(quants), currentCustomer(nullptr), ownsPlants(ownsPlantPointers)
     {
         browseTimer = new QTimer(this);
         connect(browseTimer, &QTimer::timeout, this, &Browse::onBrowseTimeout);
     }
 
     /**
-     * @brief Virtual destructor
+     * @brief Virtual destructor - cleans up owned plant pointers
      */
-    virtual ~Browse() {}
+    virtual ~Browse()
+    {
+        if (ownsPlants)
+        {
+            for (Plant *plant : plantsToBuy)
+            {
+                delete plant;
+            }
+        }
+    }
 
     /**
      * @brief Handle the browsing action
